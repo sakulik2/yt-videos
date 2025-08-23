@@ -267,9 +267,10 @@ function AddVideoSection({ onAddVideo, videos }) {
   );
 }
 
-// 视频卡片组件 - 内联版本
+// 视频卡片组件 - 修复版
 function VideoCard({ video, index, onDelete, onUpdateSubtitle }) {
-  const [subtitlePanelExpanded, setSubtitlePanelExpanded] = useState(false);
+  // 每个卡片独立的状态
+  const [isExpanded, setIsExpanded] = useState(false);
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('');
 
@@ -286,9 +287,29 @@ function VideoCard({ video, index, onDelete, onUpdateSubtitle }) {
     window.open(`https://www.youtube.com/watch?v=${video.id}`, '_blank');
   };
 
+  // 独立的切换函数
+  const togglePanel = () => {
+    setIsExpanded(prev => !prev);
+  };
+
   const handleSubtitleUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
+
+    // 检查文件大小（5MB限制）
+    if (file.size > 5 * 1024 * 1024) {
+      showMessage('文件大小超过5MB限制');
+      e.target.value = '';
+      return;
+    }
+
+    // 严格限制：仅支持srt和ass格式
+    const fileName = file.name.toLowerCase();
+    if (!fileName.endsWith('.srt') && !fileName.endsWith('.ass')) {
+      showMessage('仅支持 .srt 和 .ass 格式的字幕文件');
+      e.target.value = '';
+      return;
+    }
 
     const reader = new FileReader();
     reader.onload = function(event) {
@@ -301,12 +322,19 @@ function VideoCard({ video, index, onDelete, onUpdateSubtitle }) {
 
       onUpdateSubtitle(index, subtitleData);
       showMessage('字幕已上传成功！', 'success');
+      e.target.value = '';
+    };
+
+    reader.onerror = function() {
+      showMessage('文件读取失败，请重试');
+      e.target.value = '';
     };
 
     reader.readAsText(file, 'UTF-8');
   };
 
-  const downloadSubtitle = () => {
+  const downloadSubtitle = (e) => {
+    e.stopPropagation();
     if (!video.subtitle) return;
 
     const blob = new Blob([video.subtitle.content], { type: 'text/plain;charset=utf-8' });
@@ -320,7 +348,8 @@ function VideoCard({ video, index, onDelete, onUpdateSubtitle }) {
     URL.revokeObjectURL(url);
   };
 
-  const removeSubtitle = () => {
+  const removeSubtitle = (e) => {
+    e.stopPropagation();
     if (confirm('确定要删除这个字幕文件吗？')) {
       onUpdateSubtitle(index, null);
       showMessage('字幕已删除', 'success');
@@ -328,8 +357,11 @@ function VideoCard({ video, index, onDelete, onUpdateSubtitle }) {
   };
 
   return (
-    <div className="video-card">
-      <button className="delete-btn" onClick={() => onDelete(index)}>
+    <div className={`video-card-${video.id} ${isExpanded ? 'subtitle-expanded' : ''}`}>
+      <button className="delete-btn" onClick={(e) => {
+        e.stopPropagation();
+        onDelete(index);
+      }}>
         <i className="fas fa-times"></i>
       </button>
       
@@ -365,13 +397,19 @@ function VideoCard({ video, index, onDelete, onUpdateSubtitle }) {
         
         <div className="video-actions">
           <button 
-            className={`action-btn subtitle-btn ${video.subtitle ? 'has-subtitle' : ''}`}
-            onClick={() => setSubtitlePanelExpanded(!subtitlePanelExpanded)}
+            className={`action-btn subtitle-btn ${video.subtitle ? 'has-subtitle' : ''} ${isExpanded ? 'active' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              togglePanel();
+            }}
           >
             <i className="fas fa-closed-captioning"></i>
-            字幕
+            字幕 {isExpanded ? '收起' : '展开'}
           </button>
-          <button className="action-btn youtube-btn" onClick={openYouTube}>
+          <button className="action-btn youtube-btn" onClick={(e) => {
+            e.stopPropagation();
+            openYouTube();
+          }}>
             <i className="fab fa-youtube"></i>
             观看视频
           </button>
@@ -385,21 +423,22 @@ function VideoCard({ video, index, onDelete, onUpdateSubtitle }) {
         )}
       </div>
 
-      <div className={`subtitle-panel ${subtitlePanelExpanded ? 'expanded' : ''}`}>
+      <div className={`subtitle-panel ${isExpanded ? 'expanded' : ''}`}>
         <div className="subtitle-content">
           <div className="subtitle-upload-section">
             <div className="subtitle-upload-row">
               <label className="subtitle-upload-label">
                 <i className="fas fa-upload"></i>
-                上传字幕文件
+                上传字幕文件 (仅限 SRT 和 ASS)
               </label>
               <div className="subtitle-upload-wrapper">
                 <input 
                   type="file" 
                   className="subtitle-file-input" 
                   onChange={handleSubtitleUpload}
-                  accept=".srt,.vtt,.ass,.txt"
+                  accept=".srt,.ass"
                   style={{ display: 'none' }}
+                  key={`subtitle-${video.id}-${Math.random()}`}
                 />
                 <button 
                   className="subtitle-upload-btn" 
@@ -409,7 +448,7 @@ function VideoCard({ video, index, onDelete, onUpdateSubtitle }) {
                   }}
                 >
                   <i className="fas fa-file-upload"></i>
-                  选择文件
+                  选择字幕文件
                 </button>
               </div>
             </div>
@@ -421,7 +460,10 @@ function VideoCard({ video, index, onDelete, onUpdateSubtitle }) {
                 <i className="fas fa-file-alt"></i>
                 <div className="subtitle-file-info">
                   <div className="subtitle-file-name">{video.subtitle.name}</div>
-                  <div className="subtitle-file-size">{(video.subtitle.size / 1024).toFixed(1)} KB</div>
+                  <div className="subtitle-file-size">
+                    {(video.subtitle.size / 1024).toFixed(1)} KB 
+                    <span className="upload-time"> • 上传于 {video.subtitle.uploadedAt}</span>
+                  </div>
                 </div>
               </div>
               <div className="subtitle-actions">
@@ -438,28 +480,33 @@ function VideoCard({ video, index, onDelete, onUpdateSubtitle }) {
           )}
 
           <div className="subtitle-tips">
-            <h4>支持的字幕格式：</h4>
-            <p>.srt, .vtt, .ass, .txt</p>
-            <p>文件大小限制：5MB 以内</p>
+            <h4><i className="fas fa-info-circle"></i> 支持的字幕格式：</h4>
+            <p><strong>🔹 SRT (SubRip)：</strong>简单通用，兼容性强，适合大多数播放器</p>
+            <p><strong>🔹 ASS (Advanced SubStation Alpha)：</strong>高级格式，支持样式、特效和定位</p>
+            <p><strong>文件要求：</strong>UTF-8 编码，最大 5MB</p>
           </div>
         </div>
       </div>
 
       <style jsx>{`
-        .video-card {
+        .video-card-${video.id} {
           background: rgba(255, 255, 255, 0.95);
           border-radius: 20px;
           overflow: hidden;
           box-shadow: 0 20px 60px rgba(0,0,0,0.08);
           transition: all 0.4s ease;
           position: relative;
-          cursor: pointer;
           display: flex;
           flex-direction: column;
         }
 
-        .video-card:hover {
+        .video-card-${video.id}:hover:not(.subtitle-expanded) {
           transform: translateY(-8px) scale(1.02);
+        }
+
+        .video-card-${video.id}.subtitle-expanded {
+          transform: translateY(-4px);
+          box-shadow: 0 32px 80px rgba(0,0,0,0.15);
         }
 
         .video-thumbnail-container {
@@ -488,9 +535,10 @@ function VideoCard({ video, index, onDelete, onUpdateSubtitle }) {
           justify-content: center;
           opacity: 0;
           transition: opacity 0.3s ease;
+          cursor: pointer;
         }
 
-        .video-card:hover .play-overlay {
+        .video-card-${video.id}:hover .play-overlay {
           opacity: 1;
         }
 
@@ -555,7 +603,7 @@ function VideoCard({ video, index, onDelete, onUpdateSubtitle }) {
           z-index: 10;
         }
 
-        .video-card:hover .delete-btn {
+        .video-card-${video.id}:hover .delete-btn {
           opacity: 1;
         }
 
@@ -576,6 +624,7 @@ function VideoCard({ video, index, onDelete, onUpdateSubtitle }) {
           font-size: 12px;
           font-weight: 600;
           z-index: 10;
+          backdrop-filter: blur(10px);
         }
 
         .video-actions {
@@ -610,6 +659,11 @@ function VideoCard({ video, index, onDelete, onUpdateSubtitle }) {
           box-shadow: 0 4px 12px rgba(139, 92, 246, 0.2);
         }
 
+        .subtitle-btn.active {
+          background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+          box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+        }
+
         .youtube-btn {
           background: var(--primary-gradient);
           color: white;
@@ -631,7 +685,7 @@ function VideoCard({ video, index, onDelete, onUpdateSubtitle }) {
         }
 
         .subtitle-panel.expanded {
-          max-height: 400px;
+          max-height: 500px;
         }
 
         .subtitle-content {
@@ -719,6 +773,11 @@ function VideoCard({ video, index, onDelete, onUpdateSubtitle }) {
           font-size: 0.85rem;
         }
 
+        .upload-time {
+          color: #a0a0a0;
+          font-size: 0.8rem;
+        }
+
         .subtitle-actions {
           display: flex;
           gap: 10px;
@@ -759,22 +818,26 @@ function VideoCard({ video, index, onDelete, onUpdateSubtitle }) {
 
         .subtitle-tips {
           background: rgba(102, 126, 234, 0.05);
-          padding: 16px 20px;
+          padding: 20px 24px;
           border-radius: 12px;
           border-left: 4px solid #667eea;
         }
 
         .subtitle-tips h4 {
           color: var(--text-primary);
-          font-size: 0.9rem;
-          margin-bottom: 8px;
+          font-size: 0.95rem;
+          margin-bottom: 12px;
           font-weight: 600;
+          display: flex;
+          align-items: center;
+          gap: 8px;
         }
 
         .subtitle-tips p {
           color: var(--text-muted);
           font-size: 0.85rem;
-          margin: 2px 0;
+          margin: 6px 0;
+          line-height: 1.4;
         }
 
         .message {
@@ -794,7 +857,6 @@ function VideoCard({ video, index, onDelete, onUpdateSubtitle }) {
 // 主页组件
 export default function Home() {
   const [videos, setVideos] = useState([]);
-  const [expandedPanels, setExpandedPanels] = useState({}); // 管理每个视频的展开状态
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -825,12 +887,6 @@ export default function Home() {
     if (confirm('确定要删除这个视频吗？')) {
       const newVideos = videos.filter((_, i) => i !== index);
       saveVideos(newVideos);
-      // 清理对应的展开状态
-      setExpandedPanels(prev => {
-        const newPanels = { ...prev };
-        delete newPanels[videos[index].id];
-        return newPanels;
-      });
     }
   };
 
@@ -838,13 +894,6 @@ export default function Home() {
     const newVideos = [...videos];
     newVideos[index].subtitle = subtitleData;
     saveVideos(newVideos);
-  };
-
-  const toggleSubtitlePanel = (videoId) => {
-    setExpandedPanels(prev => ({
-      ...prev,
-      [videoId]: !prev[videoId]
-    }));
   };
 
   return (
@@ -875,13 +924,11 @@ export default function Home() {
             <div className="videos-grid">
               {videos.map((video, index) => (
                 <VideoCard
-                  key={`${video.id}-${index}`}
+                  key={`video-${video.id}-${index}`}
                   video={video}
                   index={index}
                   onDelete={handleDeleteVideo}
                   onUpdateSubtitle={handleUpdateSubtitle}
-                  isExpanded={expandedPanels[video.id] || false}
-                  onTogglePanel={() => toggleSubtitlePanel(video.id)}
                 />
               ))}
             </div>
