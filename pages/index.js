@@ -794,6 +794,7 @@ function VideoCard({ video, index, onDelete, onUpdateSubtitle }) {
 // 主页组件
 export default function Home() {
   const [videos, setVideos] = useState([]);
+  const [expandedPanels, setExpandedPanels] = useState({}); // 管理每个视频的展开状态
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -824,6 +825,12 @@ export default function Home() {
     if (confirm('确定要删除这个视频吗？')) {
       const newVideos = videos.filter((_, i) => i !== index);
       saveVideos(newVideos);
+      // 清理对应的展开状态
+      setExpandedPanels(prev => {
+        const newPanels = { ...prev };
+        delete newPanels[videos[index].id];
+        return newPanels;
+      });
     }
   };
 
@@ -831,6 +838,13 @@ export default function Home() {
     const newVideos = [...videos];
     newVideos[index].subtitle = subtitleData;
     saveVideos(newVideos);
+  };
+
+  const toggleSubtitlePanel = (videoId) => {
+    setExpandedPanels(prev => ({
+      ...prev,
+      [videoId]: !prev[videoId]
+    }));
   };
 
   return (
@@ -866,6 +880,8 @@ export default function Home() {
                   index={index}
                   onDelete={handleDeleteVideo}
                   onUpdateSubtitle={handleUpdateSubtitle}
+                  isExpanded={expandedPanels[video.id] || false}
+                  onTogglePanel={() => toggleSubtitlePanel(video.id)}
                 />
               ))}
             </div>
