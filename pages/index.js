@@ -861,7 +861,7 @@ export default function Home() {
             <div className="videos-grid">
               {videos.map((video, index) => (
                 <VideoCard
-                  key={video.id}
+                  key={`${video.id}-${index}`}
                   video={video}
                   index={index}
                   onDelete={handleDeleteVideo}
